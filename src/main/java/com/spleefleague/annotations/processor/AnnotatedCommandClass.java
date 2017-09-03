@@ -1,7 +1,7 @@
 package com.spleefleague.annotations.processor;
 
 import com.spleefleague.annotations.Dispatcher;
-import com.spleefleague.annotations.Command;
+import com.spleefleague.annotations.DispatchableCommand;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.TypeName;
@@ -12,6 +12,9 @@ import java.util.List;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import com.spleefleague.annotations.CommandSource;
+import com.spleefleague.annotations.DispatchResult;
+import com.spleefleague.annotations.DispatchResultType;
+import org.bukkit.command.CommandSender;
 
 /**
  *
@@ -42,12 +45,12 @@ public class AnnotatedCommandClass {
                 .addSuperinterface(Dispatcher.class)
                 .addModifiers(Modifier.PUBLIC)
                 .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
-//                .addField(tn, "instance", Modifier.FINAL, Modifier.PRIVATE)
-//                .addMethod(generateConstructor(tn))
                 .addMethod(generateDispatchHandler(commandEndpoints))
                 .addMethods(methods)
                 .build();
-        JavaFile javaFile = JavaFile.builder("me.joba.command.dispatch", dispatcherClass)
+        String packageName = typeElement.getQualifiedName().toString();
+        packageName = packageName.substring(0, packageName.length() - typeElement.getSimpleName().toString().length() - 1);
+        JavaFile javaFile = JavaFile.builder(packageName, dispatcherClass)
                 .build();
         return javaFile;
     }
@@ -56,12 +59,14 @@ public class AnnotatedCommandClass {
         MethodSpec.Builder builder = MethodSpec.methodBuilder("dispatch")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
-                .addParameter(Command.class, "rawInstance")
+                .addParameter(DispatchableCommand.class, "rawInstance")
+                .addParameter(CommandSender.class, "sender")
                 .addParameter(CommandSource.class, "src")
                 .addParameter(String[].class, "args")
-                .returns(TypeName.BOOLEAN);
+                .returns(TypeName.get(DispatchResult.class));
         builder.addStatement("$T instance = ($T)rawInstance", TypeName.get(typeElement.asType()), TypeName.get(typeElement.asType()));
         builder.addStatement("boolean valid");
+        builder.addStatement("$T result = new $T($T.$L)", DispatchResult.class, DispatchResult.class, DispatchResultType.class, DispatchResultType.NO_ROUTE);
         for (int i = 0; i < endpoints.size(); i++) {
             CommandEndpoint endpoint = endpoints.get(i);
             builder.addCode("valid = false");
@@ -69,11 +74,14 @@ public class AnnotatedCommandClass {
                 builder.addCode("\n|| src == $T.$L", CommandSource.class, src);
             }
             builder.addCode(";\n");
-            builder.beginControlFlow("if(valid && $L$L(instance, args))", endpoint.getName(), i);
-            builder.addStatement("return true");
+            builder.beginControlFlow(("if(valid)"));
+                builder.addStatement("result = $L$L(sender, instance, args)", endpoint.getName(), i);
+                builder.beginControlFlow("if(result.getType() == $T.$L)", DispatchResultType.class, DispatchResultType.SUCCESS);
+                    builder.addStatement("return result");
+                builder.endControlFlow();
             builder.endControlFlow();
         }
-        builder.addStatement("return false");
+        builder.addStatement("return result");
         return builder.build();
     }
     

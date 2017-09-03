@@ -1,16 +1,19 @@
 package com.spleefleague.annotations.processor.exception;
 
+import javax.lang.model.element.Element;
+
 /**
  *
  * @author jonas
  */
-public class RedundantArgumentAnnotationException extends RuntimeException{
+public class RedundantArgumentAnnotationException extends ParameterException{
     
-     public RedundantArgumentAnnotationException() {
-        super();
-     }
+    public RedundantArgumentAnnotationException(Element e) {
+        super(e);
+    }
     
-    public RedundantArgumentAnnotationException(String msg) {
-        super(msg);
+    public RedundantArgumentAnnotationException(String msg, Element e) {
+        super(msg, e);
     }
 }
+

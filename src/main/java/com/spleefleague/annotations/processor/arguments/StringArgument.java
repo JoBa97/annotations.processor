@@ -1,5 +1,7 @@
 package com.spleefleague.annotations.processor.arguments;
 
+import com.spleefleague.annotations.DispatchResult;
+import com.spleefleague.annotations.DispatchResultType;
 import com.squareup.javapoet.MethodSpec;
 import java.util.Map;
 import javax.lang.model.type.TypeKind;
@@ -27,11 +29,18 @@ public class StringArgument extends CommandArgument {
     
     private void generateArray(MethodSpec.Builder builder, int paramId) {
         builder.addStatement("param$L = new String[args.length - position]", paramId);
+        builder.addStatement("if(param$L.length == 0) return new $T(null, $T.$L)", 
+                paramId,
+                DispatchResult.class,
+                DispatchResultType.class,
+                DispatchResultType.NO_VALID_ROUTE
+        );
         builder.addStatement("System.arraycopy(args, position, param$L, 0, param$L.length)", paramId, paramId);
         builder.addStatement("position = args.length");
     }
     
     private void generateSingle(MethodSpec.Builder builder, int paramId) {
-        builder.addStatement("param$L = args[position++]", paramId);
+        consumeSafe(builder);
+        builder.addStatement("param$L = arg", paramId);
     }
 }

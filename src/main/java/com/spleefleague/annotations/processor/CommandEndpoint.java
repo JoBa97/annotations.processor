@@ -8,7 +8,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.StringJoiner;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
@@ -21,11 +20,14 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import com.spleefleague.annotations.CommandSource;
+import com.spleefleague.annotations.DispatchResult;
+import com.spleefleague.annotations.DispatchResultType;
 import com.spleefleague.annotations.Endpoint;
 import com.spleefleague.annotations.processor.arguments.CommandArgument;
 import com.spleefleague.annotations.processor.exception.InvalidTargetTypeException;
 import com.spleefleague.annotations.processor.exception.NakedArgumentException;
 import com.spleefleague.annotations.processor.exception.RedundantArgumentAnnotationException;
+import org.bukkit.command.CommandSender;
 
 /**
  *
@@ -38,6 +40,7 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
     private final CommandSource[] sources;
     private final List<CommandArgument> commandArguments;
     private final TypeElement enclosingClass;
+    private final VariableElement senderCastTarget;
     
     public CommandEndpoint(ExecutableElement method, TypeElement enclosingClass, Elements elementUtils, Types typeUtils) {
         this.method = method;
@@ -47,12 +50,30 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
         this.priority = endpoint.priority();
         this.sources = endpoint.target();
         List<? extends VariableElement> params = method.getParameters();
-        for (int i = 0; i < params.size(); i++) {
+        if(params.isEmpty()) {
+            senderCastTarget = null;
+            return;
+        }
+        VariableElement senderParam = params.get(0);
+        int start = 0;
+        if(getParamAnnotation(senderParam, params.size() == 1, elementUtils, typeUtils) == null) {
+            if(isCommandSenderArgument(senderParam, elementUtils, typeUtils)) {
+                start = 1;
+                senderCastTarget = senderParam;
+            }
+            else {    
+                throw new NakedArgumentException(senderParam.getSimpleName().toString() + " has no argument annotation", senderParam);
+            }
+        }
+        else {
+            senderCastTarget = null;
+        }
+        for (int i = start; i < params.size(); i++) {
             try {
                 VariableElement param = params.get(i);
                 AnnotationMirror paramAnnotation = getParamAnnotation(param, i == params.size() - 1, elementUtils, typeUtils);
                 if(paramAnnotation == null) {
-                    throw new NakedArgumentException(param.getSimpleName().toString() + " has no argument annotation");
+                    throw new NakedArgumentException(param.getSimpleName().toString() + " has no argument annotation", param);
                 }
                 commandArguments.add(CommandArgument.create(param.asType(), paramAnnotation));
             } catch (NoSuchMethodException | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
@@ -60,6 +81,11 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
                 throw new RuntimeException(ex.getMessage());
             }
         }
+    }
+    
+    private boolean isCommandSenderArgument(VariableElement param, Elements elementUtils, Types typeUtils) {
+        TypeElement cselement = elementUtils.getTypeElement(CommandSender.class.getCanonicalName());
+        return typeUtils.isAssignable(param.asType(), cselement.asType());
     }
     
     public String getName() {
@@ -89,10 +115,10 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
             }
             
             if (!typeUtils.isAssignable(paramType, annotationTargetType)) {
-                throw new InvalidTargetTypeException(paramType.toString() + " is not a supertype of " + annotationTargetType.toString());
+                throw new InvalidTargetTypeException(paramType.toString() + " is not a supertype of " + annotationTargetType.toString(), param);
             }
             if (paramAnnotation != null) {
-                throw new RedundantArgumentAnnotationException();
+                throw new RedundantArgumentAnnotationException(param);
             }
             paramAnnotation = mirror;
         }
@@ -110,7 +136,8 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
         Builder builder = MethodSpec.methodBuilder(this.method.getSimpleName().toString() + id);
         builder
                 .addModifiers(Modifier.PRIVATE)
-                .returns(boolean.class)
+                .returns(DispatchResult.class)
+                .addParameter(CommandSender.class, "sender")
                 .addParameter(TypeName.get(enclosingClass.asType()), "instance")
                 .addParameter(String[].class, "args");
         generateStaticHeader(builder);
@@ -123,6 +150,7 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
 
     private void generateStaticHeader(Builder builder) {
         builder.addStatement("int position = 0");
+        builder.addStatement("String arg");
         for (int i = 0; i < commandArguments.size(); i++) {
             CommandArgument carg = commandArguments.get(i);
             builder.addStatement("$T param$L", carg.getType(), i);
@@ -130,14 +158,22 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
     }
 
     private void generateStaticReturn(Builder builder) {
-        builder.addStatement("if(position != args.length) return false");
+        builder.addStatement("if(position != args.length) return new $T($T.$L)", 
+                DispatchResult.class, 
+                DispatchResultType.class, 
+                DispatchResultType.NO_VALID_ROUTE
+        );
         StringJoiner sj = new StringJoiner(", ");
         String methodName = method.getSimpleName().toString();
+        if(senderCastTarget != null) {
+            builder.addStatement("$T senderCasted = (($T)sender)", senderCastTarget, senderCastTarget);
+            sj.add("senderCasted");
+        }
         for (int i = 0; i < commandArguments.size(); i++) {
             sj.add("param" + i);
         }
         builder.addStatement("instance.$L($L)", methodName, sj.toString());
-        builder.addStatement("return true");
+        builder.addStatement("return new $T($T.$L)", DispatchResult.class, DispatchResultType.class, DispatchResultType.SUCCESS);
     }
     
     /**

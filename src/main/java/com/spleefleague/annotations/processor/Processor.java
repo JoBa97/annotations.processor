@@ -30,6 +30,7 @@ import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import com.spleefleague.annotations.Endpoint;
+import com.spleefleague.annotations.processor.exception.ParameterException;
 
 /**
  *
@@ -77,6 +78,12 @@ public class Processor extends AbstractProcessor {
                 if(!success) {
                     messager.printMessage(Diagnostic.Kind.ERROR, "Error processing element", annotatedElement);
                 }
+            } catch(ParameterException e) {
+                Element elem = e.getElement();
+                if(elem == null) {
+                    elem = annotatedElement;
+                }
+                messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage(), elem);
             } catch(Exception e) {
                 messager.printMessage(Diagnostic.Kind.ERROR, e.getMessage(), annotatedElement);
                 return false;
