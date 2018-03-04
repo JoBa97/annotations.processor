@@ -33,12 +33,12 @@ public class LiteralArgument extends CommandArgument {
     public void generateCode(MethodSpec.Builder builder, int paramId) {
         consumeSafe(builder);
         builder.addStatement("param$L = arg", paramId);
-        builder.addCode("boolean valid = param$L.equalsIgnoreCase($S)", paramId, value);
+        builder.addCode("boolean valid$L = param$L.equalsIgnoreCase($S)", paramId, paramId, value);
         for(String alias : aliases) {
             builder.addCode("\n|| (param$L.equalsIgnoreCase($S))", paramId, alias);
         }
         builder.addCode(";\n");
-        builder.addCode("if(!valid) ");
+        builder.addCode("if(!valid" + paramId + ") ");
         returnResult(builder, null, DispatchResultType.NO_VALID_ROUTE);
     }
 }
