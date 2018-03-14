@@ -100,11 +100,11 @@ public class DoubleArgument extends CommandArgument {
                         DispatchResultType.OTHER
                 );
             }
-            if (min > Integer.MIN_VALUE) {
+            if (min > Double.MIN_VALUE) {
                 builder.addCode("if(param$L < $L) ", paramId, min);
                 rangeError(builder);
             }
-            if (max < Integer.MAX_VALUE) {
+            if (max < Double.MAX_VALUE) {
                 builder.addCode("if(param$L > $L) ", paramId, max);
                 rangeError(builder);
             }
