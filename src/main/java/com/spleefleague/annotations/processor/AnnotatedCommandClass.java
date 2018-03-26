@@ -14,6 +14,10 @@ import javax.lang.model.element.TypeElement;
 import com.spleefleague.annotations.CommandSource;
 import com.spleefleague.annotations.DispatchResult;
 import com.spleefleague.annotations.DispatchResultType;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.ParameterizedTypeName;
+import com.squareup.javapoet.WildcardTypeName;
+import java.util.Arrays;
 import org.bukkit.command.CommandSender;
 
 /**
@@ -56,6 +60,16 @@ public class AnnotatedCommandClass {
     }
     
     private MethodSpec generateDispatchHandler(List<CommandEndpoint> endpoints) {
+        TypeName genericFreeTypeName;
+        if(typeElement.getTypeParameters().isEmpty()) {
+            genericFreeTypeName = TypeName.get(typeElement.asType());
+        }
+        else {
+            TypeName wildcard = WildcardTypeName.subtypeOf(Object.class);
+            TypeName[] wildcards = new TypeName[typeElement.getTypeParameters().size()];
+            Arrays.fill(wildcards, wildcard);
+            genericFreeTypeName = ParameterizedTypeName.get(ClassName.get(typeElement), wildcards);
+        }
         MethodSpec.Builder builder = MethodSpec.methodBuilder("dispatch")
                 .addModifiers(Modifier.PUBLIC)
                 .addAnnotation(Override.class)
@@ -64,7 +78,7 @@ public class AnnotatedCommandClass {
                 .addParameter(CommandSource.class, "src")
                 .addParameter(String[].class, "args")
                 .returns(TypeName.get(DispatchResult.class));
-        builder.addStatement("$T instance = ($T)rawInstance", TypeName.get(typeElement.asType()), TypeName.get(typeElement.asType()));
+        builder.addStatement("$T instance = ($T)rawInstance", genericFreeTypeName, genericFreeTypeName);
         builder.addStatement("boolean valid");
         builder.addStatement("$T result = new $T($T.$L)", DispatchResult.class, DispatchResult.class, DispatchResultType.class, DispatchResultType.NO_ROUTE);
         for (int i = 0; i < endpoints.size(); i++) {

@@ -27,6 +27,10 @@ import com.spleefleague.annotations.processor.arguments.CommandArgument;
 import com.spleefleague.annotations.processor.exception.InvalidTargetTypeException;
 import com.spleefleague.annotations.processor.exception.NakedArgumentException;
 import com.spleefleague.annotations.processor.exception.RedundantArgumentAnnotationException;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.ParameterizedTypeName;
+import com.squareup.javapoet.WildcardTypeName;
+import java.util.Arrays;
 import org.bukkit.command.CommandSender;
 
 /**
@@ -39,12 +43,20 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
     private final int priority;
     private final CommandSource[] sources;
     private final List<CommandArgument> commandArguments;
-    private final TypeElement enclosingClass;
+    private final TypeName genericFreeTypeName;
     private final VariableElement senderCastTarget;
     
     public CommandEndpoint(ExecutableElement method, TypeElement enclosingClass, Elements elementUtils, Types typeUtils) {
         this.method = method;
-        this.enclosingClass = enclosingClass;
+        if(enclosingClass.getTypeParameters().isEmpty()) {
+            genericFreeTypeName = TypeName.get(enclosingClass.asType());
+        }
+        else {
+            TypeName wildcard = WildcardTypeName.subtypeOf(Object.class);
+            TypeName[] wildcards = new TypeName[enclosingClass.getTypeParameters().size()];
+            Arrays.fill(wildcards, wildcard);
+            genericFreeTypeName = ParameterizedTypeName.get(ClassName.get(enclosingClass), wildcards);
+        }
         this.commandArguments = new ArrayList<>();
         Endpoint endpoint = method.getAnnotation(Endpoint.class);
         this.priority = endpoint.priority();
@@ -138,7 +150,7 @@ public class CommandEndpoint implements Comparable<CommandEndpoint> {
                 .addModifiers(Modifier.PRIVATE)
                 .returns(DispatchResult.class)
                 .addParameter(CommandSender.class, "sender")
-                .addParameter(TypeName.get(enclosingClass.asType()), "instance")
+                .addParameter(genericFreeTypeName, "instance")
                 .addParameter(String[].class, "args");
         generateStaticHeader(builder);
         for (int i = 0; i < commandArguments.size(); i++) {
