@@ -2,9 +2,11 @@ package com.spleefleague.annotations.processor.arguments;
 
 import com.spleefleague.annotations.DispatchResultType;
 import com.squareup.javapoet.MethodSpec;
-import com.sun.tools.javac.code.Attribute.Constant;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -19,10 +21,19 @@ public class LiteralArgument extends CommandArgument {
     public LiteralArgument(Map<String, Object> values, TypeMirror type) {
         super(values, type);
         value = super.getValue("value");
-        List<Constant> l = super.getValue("aliases");
+        //Real type is: com.sun.tools.javac.code.Attribute$Constant
+        //It is accessed through reflection, because this class (and it's module, jdk.compiler) 
+        //is not exposed in Java 9
+        List<?> l = super.getValue("aliases");
         aliases = new String[l.size()];
         for (int i = 0; i < l.size(); i++) {
-            aliases[i] = (String)l.get(i).getValue();
+            try {
+                Object aliasConstant = l.get(i);
+                Method m = aliasConstant.getClass().getMethod("getValue");
+                aliases[i] = (String)m.invoke(aliasConstant);
+            } catch (Exception ex) {
+                Logger.getLogger(LiteralArgument.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
         if(value == null) {
             throw new RuntimeException("Value can not be null");
